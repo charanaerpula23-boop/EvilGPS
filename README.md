@@ -1,42 +1,122 @@
 # EvilGPS
 
-EvilGPS is an Android app for mock location testing on standard Android devices.
+EvilGPS is an Android mock location app for testing location-dependent behavior on standard Android phones. It supports both fixed spoofed coordinates and route-based travel simulation, with search, map picking, and a foreground service that keeps sessions alive more reliably.
 
-## Features
+## What It Does
 
-- Static mock location selection from search or map
-- Travel mode with routed movement simulation
-- Foreground service that restores active sessions after task removal
-- OpenStreetMap search and map-based location picking
+- Pick a single mock location from the map or search and keep the device pinned there
+- Simulate travel between two locations along a road route
+- Search places by name with OpenStreetMap / Nominatim
+- Select locations visually on a map picker
+- Continue active mock sessions through a foreground service
+- Restore active sessions after task removal or process restart
+
+## Feature Summary
+
+- Static mock mode
+- Travel mode with route interpolation
+- Place search with location suggestions
+- Map-first location selection flow
+- White / black / pink Material 3 UI
+- Custom map selection pin
+- Session persistence for active mock runs
+
+## How It Works
+
+EvilGPS uses Android's mock location testing path through `LocationManager` test providers. The app registers itself as a mock location app through Developer Options, then publishes fake GPS/network locations from a foreground service.
+
+Travel mode fetches a road route and emits gradual position updates over time to simulate movement instead of jumping directly from point A to point B.
 
 ## Requirements
 
-- Android Developer Options enabled
-- Mock location app set to EvilGPS
+- Android 10+ (`minSdk 29`)
+- Developer Options enabled on the device
+- EvilGPS selected in `Developer Options > Select mock location app`
 - Internet connection for place search and route lookup
+
+## Setup On Device
+
+1. Install the app.
+2. Open Android settings.
+3. Enable Developer Options if not already enabled.
+4. Go to `Developer Options > Select mock location app`.
+5. Choose `EvilGPS`.
+6. Open the app and pick a location or route.
+
+## Usage
+
+### Static Mock
+
+1. Search for a location or tap the location card to open the map.
+2. Pick the target point.
+3. Adjust accuracy if needed.
+4. Tap `Start Mocking`.
+5. Tap `Stop Mocking` to end the session.
+
+### Travel Mode
+
+1. Choose a start location.
+2. Choose an end location.
+3. Set the travel speed.
+4. Tap `Fetch Route via Road`.
+5. Tap `Start Travel`.
+6. The app will move the reported device location along the route.
+
+## Tech Stack
+
+- Kotlin
+- Jetpack Compose
+- Material 3
+- Android foreground service
+- osmdroid for the map view
+- Nominatim for search
+- OSRM public API for road routing
+
+## Project Structure
+
+- `app/src/main/java/com/charanhyper/tech/greydailer/`: core app logic, service, view models, and screens
+- `app/src/main/java/com/charanhyper/tech/greydailer/ui/`: Compose UI screens and shared UI components
+- `app/src/main/java/com/charanhyper/tech/greydailer/ui/theme/`: app theme, colors, and typography
+- `app/src/main/res/`: Android resources, strings, icons, and XML config
 
 ## Build
 
-```bash
-./gradlew :app:assembleDebug
-```
-
-On Windows:
+### Windows
 
 ```bat
 gradlew.bat :app:assembleDebug
 ```
 
+### macOS / Linux
+
+```bash
+./gradlew :app:assembleDebug
+```
+
 ## Install
+
+### Windows
 
 ```bat
 gradlew.bat installDebug
 ```
 
-## Notes
+### macOS / Linux
 
-- This project is intended for testing, prototyping, and development workflows.
-- Search uses Nominatim and route lookup uses OSRM public endpoints.
+```bash
+./gradlew installDebug
+```
+
+## Development Notes
+
+- Search results come from Nominatim and may vary by query quality and network condition.
+- Route generation depends on the public OSRM endpoint.
+- Active sessions are persisted and restored by the foreground service.
+- The current package name still uses the original internal namespace: `com.charanhyper.tech.greydailer`.
+
+## Open Source
+
+This repository is open source under the MIT license. Contributions, bug reports, and cleanup PRs are welcome.
 
 ## Author
 
