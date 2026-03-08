@@ -37,7 +37,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
 
@@ -164,37 +166,111 @@ fun LocationSearchBar(
 
 private suspend fun searchLocations(query: String): List<SearchResult> =
     withContext(Dispatchers.IO) {
-        try {
-            val encoded = URLEncoder.encode(query, "UTF-8")
-            val url = "https://photon.komoot.io/api/?q=$encoded&limit=10&lang=en"
-            val conn = URL(url).openConnection().apply {
-                setRequestProperty("User-Agent", "EvilGPS/1.0")
-                setRequestProperty("Accept", "application/json")
-                connectTimeout = 8000
-                readTimeout = 8000
-            }
-            val root = JSONObject(conn.getInputStream().bufferedReader().readText())
-            val features = root.getJSONArray("features")
-            (0 until features.length()).map { i ->
-                val feature = features.getJSONObject(i)
-                val props = feature.getJSONObject("properties")
-                val coords = feature.getJSONObject("geometry").getJSONArray("coordinates")
-                val lng = coords.getDouble(0)
-                val lat = coords.getDouble(1)
-                SearchResult(
-                    displayName = buildDisplayName(props),
-                    subtitle = buildSubtitle(props),
-                    lat = lat,
-                    lng = lng
-                )
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        // Try Nominatim first (better structured India results), fallback to Photon
+        val nominatimResults = searchNominatim(query)
+        if (nominatimResults.isNotEmpty()) return@withContext nominatimResults
+        searchPhoton(query)
     }
 
-/** Primary label: name > street > city > state */
-private fun buildDisplayName(props: JSONObject): String {
+/** Nominatim with India bias — good structured address data */
+private fun searchNominatim(query: String): List<SearchResult> {
+    return try {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://nominatim.openstreetmap.org/search" +
+            "?q=$encoded" +
+            "&format=json" +
+            "&limit=10" +
+            "&addressdetails=1" +
+            "&dedupe=1" +
+            "&accept-language=en"
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.setRequestProperty("User-Agent", "EvilGPS/1.0 (Android)")
+        conn.setRequestProperty("Accept", "application/json")
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        val json = JSONArray(conn.inputStream.bufferedReader().readText())
+        conn.disconnect()
+        (0 until json.length()).map { i ->
+            val obj = json.getJSONObject(i)
+            val addr = obj.optJSONObject("address")
+            SearchResult(
+                displayName = buildNominatimName(obj, addr),
+                subtitle = buildNominatimSubtitle(addr),
+                lat = obj.getString("lat").toDouble(),
+                lng = obj.getString("lon").toDouble()
+            )
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+/** Photon (Komoot) as fallback — fast, no rate limit */
+private fun searchPhoton(query: String): List<SearchResult> {
+    return try {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://photon.komoot.io/api/?q=$encoded&limit=10&lang=en"
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.setRequestProperty("User-Agent", "EvilGPS/1.0")
+        conn.setRequestProperty("Accept", "application/json")
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        val root = JSONObject(conn.inputStream.bufferedReader().readText())
+        conn.disconnect()
+        val features = root.getJSONArray("features")
+        (0 until features.length()).map { i ->
+            val feature = features.getJSONObject(i)
+            val props = feature.getJSONObject("properties")
+            val coords = feature.getJSONObject("geometry").getJSONArray("coordinates")
+            SearchResult(
+                displayName = buildPhotonName(props),
+                subtitle = buildPhotonSubtitle(props),
+                lat = coords.getDouble(1),
+                lng = coords.getDouble(0)
+            )
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+/** Nominatim: primary label from address parts */
+private fun buildNominatimName(obj: JSONObject, addr: JSONObject?): String {
+    if (addr == null) {
+        return obj.getString("display_name").split(",").firstOrNull()?.trim() ?: ""
+    }
+    return (addr.optString("name").takeIf { it.isNotEmpty() }
+        ?: addr.optString("amenity").takeIf { it.isNotEmpty() }
+        ?: addr.optString("tourism").takeIf { it.isNotEmpty() }
+        ?: addr.optString("road").takeIf { it.isNotEmpty() }
+        ?: addr.optString("suburb").takeIf { it.isNotEmpty() }
+        ?: addr.optString("neighbourhood").takeIf { it.isNotEmpty() }
+        ?: addr.optString("city").takeIf { it.isNotEmpty() }
+        ?: addr.optString("town").takeIf { it.isNotEmpty() }
+        ?: addr.optString("village").takeIf { it.isNotEmpty() }
+        ?: addr.optString("county").takeIf { it.isNotEmpty() }
+        ?: addr.optString("state_district").takeIf { it.isNotEmpty() }
+        ?: obj.getString("display_name").split(",").firstOrNull()?.trim()
+        ?: "")
+}
+
+/** Nominatim: secondary label */
+private fun buildNominatimSubtitle(addr: JSONObject?): String {
+    if (addr == null) return ""
+    val parts = listOfNotNull(
+        addr.optString("suburb").takeIf { it.isNotEmpty() }
+            ?: addr.optString("neighbourhood").takeIf { it.isNotEmpty() },
+        addr.optString("city").takeIf { it.isNotEmpty() }
+            ?: addr.optString("town").takeIf { it.isNotEmpty() }
+            ?: addr.optString("village").takeIf { it.isNotEmpty() },
+        addr.optString("state").takeIf { it.isNotEmpty() },
+        addr.optString("country").takeIf { it.isNotEmpty() }
+    )
+    return parts.joinToString(", ")
+}
+
+/** Photon: primary label */
+private fun buildPhotonName(props: JSONObject): String {
     return (props.optString("name").takeIf { it.isNotEmpty() }
         ?: props.optString("street").takeIf { it.isNotEmpty() }
         ?: props.optString("city").takeIf { it.isNotEmpty() }
@@ -204,15 +280,14 @@ private fun buildDisplayName(props: JSONObject): String {
         ?: "Unknown location")
 }
 
-/** Secondary label: city, state, country */
-private fun buildSubtitle(props: JSONObject): String {
+/** Photon: secondary label */
+private fun buildPhotonSubtitle(props: JSONObject): String {
     val parts = listOfNotNull(
         props.optString("city").takeIf { it.isNotEmpty() }
             ?: props.optString("district").takeIf { it.isNotEmpty() },
         props.optString("state").takeIf { it.isNotEmpty() },
         props.optString("country").takeIf { it.isNotEmpty() }
     )
-    // don't repeat the display name in the subtitle
-    val displayName = buildDisplayName(props)
+    val displayName = buildPhotonName(props)
     return parts.filter { it != displayName }.joinToString(", ")
 }

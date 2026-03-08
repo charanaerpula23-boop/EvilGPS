@@ -20,20 +20,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -69,32 +66,17 @@ fun MockLocationScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        var showDisclaimer by remember { mutableStateOf(false) }
-        if (showDisclaimer) {
-            DisclaimerDialog(onDismiss = { showDisclaimer = false })
-        }
-
-        // Header with info button and status chip
+        // Header with status chip
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Mock Location",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(onClick = { showDisclaimer = true }) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = "Disclaimer",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
+            Text(
+                text = "Mock Location",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
@@ -323,81 +305,3 @@ internal fun ErrorCard(message: String, onDismiss: () -> Unit) {
     }
 }
 
-@Composable
-internal fun DisclaimerDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                Icons.Default.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
-        title = {
-            Text(
-                text = "Disclaimer & Info",
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Legal Notice",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "This app is provided \"as is\" under the MIT License. " +
-                        "The developer is NOT responsible for any misuse, legal consequences, " +
-                        "or damages arising from the use of this application.\n\n" +
-                        "Mock location spoofing may violate the terms of service of certain apps " +
-                        "and could be illegal in some jurisdictions. Use at your own risk and " +
-                        "only for legitimate testing or development purposes.",
-                    style = MaterialTheme.typography.bodySmall,
-                    lineHeight = 20.sp
-                )
-                Text(
-                    text = "Technical Notes",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "\u2022 Route generation depends on the public OSRM endpoint " +
-                        "(router.project-osrm.org). Availability is not guaranteed.\n" +
-                        "\u2022 Location search uses Photon (Komoot) geocoding, built on OpenStreetMap data. " +
-                        "Fair-use rate limits apply.\n" +
-                        "\u2022 Active mock sessions are persisted and automatically restored " +
-                        "by the foreground service.\n" +
-                        "\u2022 The internal package namespace is com.charanhyper.tech.greydailer " +
-                        "(original project name retained).",
-                    style = MaterialTheme.typography.bodySmall,
-                    lineHeight = 20.sp
-                )
-                Text(
-                    text = "Cautions",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.error
-                )
-                Text(
-                    text = "\u2022 Do NOT use this app to cheat in games, deceive ride-sharing " +
-                        "services, or commit fraud.\n" +
-                        "\u2022 Some banking and payment apps may malfunction or lock your account " +
-                        "if a mock location is detected.\n" +
-                        "\u2022 Always disable mock locations when you are done testing.\n" +
-                        "\u2022 The developer assumes zero liability for any consequences.",
-                    style = MaterialTheme.typography.bodySmall,
-                    lineHeight = 20.sp
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Got it")
-            }
-        }
-    )
-}

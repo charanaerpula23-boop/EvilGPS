@@ -10,6 +10,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.Icon
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.charanhyper.tech.greydailer.ui.DisclaimerScreen
 import com.charanhyper.tech.greydailer.ui.MapPickerScreen
 import com.charanhyper.tech.greydailer.ui.MockLocationScreen
 import com.charanhyper.tech.greydailer.ui.TravelScreen
@@ -56,9 +58,12 @@ class MainActivity : ComponentActivity() {
             GreydailerTheme {
                 var selectedTab by remember { mutableStateOf(0) }
                 var pickerMode by remember { mutableStateOf(PickerMode.None) }
+                var showDisclaimer by remember { mutableStateOf(false) }
 
                 // â”€â”€ Full-screen map picker overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                if (pickerMode != PickerMode.None) {
+                if (showDisclaimer) {
+                    DisclaimerScreen(onBack = { showDisclaimer = false })
+                } else if (pickerMode != PickerMode.None) {
                     val initLat = when (pickerMode) {
                         PickerMode.MockLocation -> mockViewModel.latitude.toDoubleOrNull() ?: 37.7749
                         PickerMode.TravelStart  -> travelViewModel.startLat.toDoubleOrNull() ?: 37.7749
@@ -135,6 +140,21 @@ class MainActivity : ComponentActivity() {
                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                         selectedTextColor = MaterialTheme.colorScheme.primary,
                                         indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                                NavigationBarItem(
+                                    selected = false,
+                                    onClick = { showDisclaimer = true },
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.Info,
+                                            contentDescription = "Disclaimer"
+                                        )
+                                    },
+                                    label = { Text("Info") },
+                                    colors = NavigationBarItemDefaults.colors(
                                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
