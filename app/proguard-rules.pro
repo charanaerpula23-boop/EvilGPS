@@ -19,3 +19,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# osmdroid
+-keep class org.osmdroid.** { *; }
+-dontwarn org.osmdroid.**
+
+# Keep Kotlin metadata for Compose
+-keep class kotlin.Metadata { *; }
+-dontwarn kotlin.**
