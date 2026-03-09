@@ -77,8 +77,8 @@ fun DisclaimerScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 titleColor = MaterialTheme.colorScheme.primary,
                 content = "\u2022 Route generation depends on the public OSRM endpoint " +
                     "(router.project-osrm.org). Availability is not guaranteed.\n\n" +
-                    "\u2022 Location search uses Photon (Komoot) geocoding, built on " +
-                    "OpenStreetMap data. Fair-use rate limits apply.\n\n" +
+                    "\u2022 Location search uses Android's built-in Geocoder " +
+                    "(Google Play Services). Falls back to Nominatim if unavailable.\n\n" +
                     "\u2022 Active mock sessions are persisted and automatically restored " +
                     "by the foreground service.\n\n" +
                     "\u2022 The internal package namespace is " +

@@ -8,7 +8,7 @@ EvilGPS is an Android mock location app for testing location-dependent behavior 
 
 - Pick a single mock location from the map or search and keep the device pinned there
 - Simulate travel between two locations along a road route
-- Search places by name with Photon geocoding (OpenStreetMap data)
+- Search places by name with Android Geocoder (Google Play Services)
 - Select locations visually on a map picker
 - Continue active mock sessions through a foreground service
 - Restore active sessions after task removal or process restart
@@ -71,7 +71,7 @@ Travel mode fetches a road route and emits gradual position updates over time to
 - Material 3
 - Android foreground service
 - osmdroid for the map view
-- Photon (Komoot) for geocoding search
+- Android Geocoder for location search (Nominatim fallback)
 - OSRM public API for road routing
 
 ## Project Structure
@@ -111,7 +111,7 @@ gradlew.bat installDebug
 
 ## Development Notes
 
-- Search results come from Photon geocoding and may vary by query quality and network condition.
+- Search results come from Android's built-in Geocoder (Google Play Services) with Nominatim as fallback.
 - Route generation depends on the public OSRM endpoint.
 - Active sessions are persisted and restored by the foreground service.
 - The current package name still uses the original internal namespace: `com.charanhyper.tech.greydailer`.
