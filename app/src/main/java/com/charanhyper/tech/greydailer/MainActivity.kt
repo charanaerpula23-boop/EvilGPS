@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.charanhyper.tech.greydailer.ui.DisclaimerScreen
 import com.charanhyper.tech.greydailer.ui.MapPickerScreen
 import com.charanhyper.tech.greydailer.ui.MockLocationScreen
+import com.charanhyper.tech.greydailer.ui.RandomScreen
 import com.charanhyper.tech.greydailer.ui.TravelScreen
 import com.charanhyper.tech.greydailer.ui.theme.GreydailerTheme
 
@@ -38,6 +40,7 @@ class MainActivity : ComponentActivity() {
 
     private val mockViewModel: MockLocationViewModel by viewModels()
     private val travelViewModel: TravelViewModel by viewModels()
+    private val randomViewModel: RandomLocationViewModel by viewModels()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -145,6 +148,24 @@ class MainActivity : ComponentActivity() {
                                     )
                                 )
                                 NavigationBarItem(
+                                    selected = selectedTab == 2,
+                                    onClick = { selectedTab = 2 },
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.Public,
+                                            contentDescription = "Random"
+                                        )
+                                    },
+                                    label = { Text("Random") },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                                NavigationBarItem(
                                     selected = false,
                                     onClick = { showDisclaimer = true },
                                     icon = {
@@ -172,6 +193,10 @@ class MainActivity : ComponentActivity() {
                                 viewModel = travelViewModel,
                                 onPickStart = { pickerMode = PickerMode.TravelStart },
                                 onPickEnd   = { pickerMode = PickerMode.TravelEnd },
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                            2 -> RandomScreen(
+                                viewModel = randomViewModel,
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }

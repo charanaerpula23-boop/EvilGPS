@@ -40,7 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -170,13 +170,13 @@ fun LocationSearchBar(
 
 /**
  * Search using Android's built-in Geocoder (Google Play Services backend).
- * Falls back to Nominatim if Geocoder is unavailable or returns nothing.
+ * Falls back to ArcGIS World Geocoding Service if Geocoder is unavailable or returns nothing.
  */
 private suspend fun searchLocations(context: Context, query: String): List<SearchResult> =
     withContext(Dispatchers.IO) {
         val geocoderResults = searchWithGeocoder(context, query)
         if (geocoderResults.isNotEmpty()) return@withContext geocoderResults
-        searchNominatim(query)
+        searchArcGIS(query)
     }
 
 /** Android built-in Geocoder — uses Google Maps data, no API key needed */
@@ -189,7 +189,6 @@ private fun searchWithGeocoder(context: Context, query: String): List<SearchResu
         addresses.mapNotNull { addr ->
             if (!addr.hasLatitude() || !addr.hasLongitude()) return@mapNotNull null
 
-            val nameParts = mutableListOf<String>()
             val name = addr.featureName
             val thoroughfare = addr.thoroughfare
             val subLocality = addr.subLocality
@@ -198,7 +197,6 @@ private fun searchWithGeocoder(context: Context, query: String): List<SearchResu
             val admin = addr.adminArea
             val country = addr.countryName
 
-            // Build display name: most specific available
             val displayName = when {
                 !name.isNullOrBlank() && name != addr.latitude.toString() -> name
                 !thoroughfare.isNullOrBlank() -> thoroughfare
@@ -207,13 +205,11 @@ private fun searchWithGeocoder(context: Context, query: String): List<SearchResu
                 !subAdmin.isNullOrBlank() -> subAdmin
                 !admin.isNullOrBlank() -> admin
                 else -> {
-                    // Use address lines as fallback
                     val line = addr.getAddressLine(0)
                     line?.split(",")?.firstOrNull()?.trim() ?: "Unknown"
                 }
             }
 
-            // Build subtitle from remaining parts
             val subtitleParts = listOfNotNull(
                 subLocality?.takeIf { it != displayName },
                 locality?.takeIf { it != displayName },
@@ -233,46 +229,80 @@ private fun searchWithGeocoder(context: Context, query: String): List<SearchResu
     }
 }
 
-/** Nominatim as fallback when Geocoder is unavailable */
-private fun searchNominatim(query: String): List<SearchResult> {
+/** ArcGIS World Geocoding Service — superior global coverage, free tier, no API key */
+private fun searchArcGIS(query: String): List<SearchResult> {
     return try {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val url = "https://nominatim.openstreetmap.org/search" +
-            "?q=$encoded&format=json&limit=10&addressdetails=1&dedupe=1&accept-language=en"
+        val url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/suggest" +
+            "?text=$encoded&f=json&maxSuggestions=10"
         val conn = URL(url).openConnection() as HttpURLConnection
-        conn.setRequestProperty("User-Agent", "EvilGPS/1.0 (Android)")
+        conn.setRequestProperty("User-Agent", "EvilGPS/1.0")
         conn.setRequestProperty("Accept", "application/json")
         conn.connectTimeout = 8000
         conn.readTimeout = 8000
-        val json = JSONArray(conn.inputStream.bufferedReader().readText())
+        val root = JSONObject(conn.inputStream.bufferedReader().readText())
         conn.disconnect()
-        (0 until json.length()).map { i ->
-            val obj = json.getJSONObject(i)
-            val addr = obj.optJSONObject("address")
-            val name = addr?.let { a ->
-                a.optString("name").takeIf { it.isNotEmpty() }
-                    ?: a.optString("road").takeIf { it.isNotEmpty() }
-                    ?: a.optString("suburb").takeIf { it.isNotEmpty() }
-                    ?: a.optString("city").takeIf { it.isNotEmpty() }
-                    ?: a.optString("town").takeIf { it.isNotEmpty() }
-                    ?: a.optString("village").takeIf { it.isNotEmpty() }
-            } ?: obj.getString("display_name").split(",").firstOrNull()?.trim() ?: ""
-            val subtitle = addr?.let { a ->
-                listOfNotNull(
-                    a.optString("city").takeIf { it.isNotEmpty() }
-                        ?: a.optString("town").takeIf { it.isNotEmpty() },
-                    a.optString("state").takeIf { it.isNotEmpty() },
-                    a.optString("country").takeIf { it.isNotEmpty() }
-                ).joinToString(", ")
-            } ?: ""
-            SearchResult(
-                displayName = name,
-                subtitle = subtitle,
-                lat = obj.getString("lat").toDouble(),
-                lng = obj.getString("lon").toDouble()
-            )
+
+        val suggestions = root.optJSONArray("suggestions") ?: return emptyList()
+        val results = mutableListOf<SearchResult>()
+
+        for (i in 0 until suggestions.length()) {
+            val suggestion = suggestions.getJSONObject(i)
+            val magicKey = suggestion.optString("magicKey", "")
+            val text = suggestion.optString("text", "")
+            if (magicKey.isEmpty()) continue
+
+            // Resolve each suggestion to coordinates via findAddressCandidates
+            val candidate = resolveArcGISCandidate(text, magicKey) ?: continue
+            results.add(candidate)
         }
+        results
     } catch (_: Exception) {
         emptyList()
+    }
+}
+
+/** Resolve an ArcGIS suggestion to lat/lng using findAddressCandidates */
+private fun resolveArcGISCandidate(text: String, magicKey: String): SearchResult? {
+    return try {
+        val encodedText = URLEncoder.encode(text, "UTF-8")
+        val encodedKey = URLEncoder.encode(magicKey, "UTF-8")
+        val url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates" +
+            "?SingleLine=$encodedText&magicKey=$encodedKey&f=json&maxLocations=1&outFields=City,Region,CntryName"
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.setRequestProperty("User-Agent", "EvilGPS/1.0")
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        val root = JSONObject(conn.inputStream.bufferedReader().readText())
+        conn.disconnect()
+
+        val candidates = root.optJSONArray("candidates")
+        if (candidates == null || candidates.length() == 0) return null
+
+        val candidate = candidates.getJSONObject(0)
+        val location = candidate.getJSONObject("location")
+        val attrs = candidate.optJSONObject("attributes")
+
+        val fullAddress = candidate.optString("address", "")
+        val parts = fullAddress.split(",").map { it.trim() }
+        val displayName = parts.firstOrNull() ?: "Unknown"
+        val subtitle = if (attrs != null) {
+            listOfNotNull(
+                attrs.optString("City").takeIf { it.isNotEmpty() },
+                attrs.optString("Region").takeIf { it.isNotEmpty() },
+                attrs.optString("CntryName").takeIf { it.isNotEmpty() }
+            ).filter { it != displayName }.joinToString(", ")
+        } else {
+            parts.drop(1).joinToString(", ")
+        }
+
+        SearchResult(
+            displayName = displayName,
+            subtitle = subtitle,
+            lat = location.getDouble("y"),
+            lng = location.getDouble("x")
+        )
+    } catch (_: Exception) {
+        null
     }
 }

@@ -33,14 +33,17 @@ class MockLocationService : Service() {
         const val ACTION_START        = "com.charanhyper.tech.greydailer.START_MOCK"
         const val ACTION_STOP         = "com.charanhyper.tech.greydailer.STOP_MOCK"
         const val ACTION_TRAVEL_START = "com.charanhyper.tech.greydailer.TRAVEL_START"
+        const val ACTION_RANDOM_START = "com.charanhyper.tech.greydailer.RANDOM_START"
         const val ACTION_RESTORE      = "com.charanhyper.tech.greydailer.RESTORE_MOCK"
         const val EXTRA_LAT           = "extra_lat"
         const val EXTRA_LNG           = "extra_lng"
         const val EXTRA_ACC           = "extra_acc"
         const val EXTRA_SPEED_KMH     = "extra_speed_kmh"
+        const val EXTRA_CITY          = "extra_city"
         const val BROADCAST_STATUS          = "com.charanhyper.tech.greydailer.MOCK_STATUS"
         const val BROADCAST_TRAVEL_DONE     = "com.charanhyper.tech.greydailer.TRAVEL_DONE"
         const val BROADCAST_TRAVEL_PROGRESS = "com.charanhyper.tech.greydailer.TRAVEL_PROGRESS"
+        const val BROADCAST_RANDOM_CITY     = "com.charanhyper.tech.greydailer.RANDOM_CITY"
         const val EXTRA_ERROR    = "extra_error"
         const val EXTRA_PROGRESS = "extra_progress"
         private const val NOTIFICATION_ID = 1001
@@ -52,10 +55,14 @@ class MockLocationService : Service() {
         private const val KEY_ACC = "acc"
         private const val KEY_SPEED_KMH = "speed_kmh"
         private const val KEY_ROUTE = "route"
+        private const val KEY_RANDOM_INDEX = "random_index"
         private const val MODE_STATIC = "static"
         private const val MODE_TRAVEL = "travel"
+        private const val MODE_RANDOM = "random"
         private const val TAG = "MockLocationService"
     }
+
+    private data class RandomCity(val name: String, val lat: Double, val lng: Double)
 
     private lateinit var locationManager: LocationManager
     private var mockJob: Job? = null
@@ -63,6 +70,18 @@ class MockLocationService : Service() {
     private val servicePrefs by lazy {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
+    private val randomCities = listOf(
+        RandomCity("New York", 40.7128, -74.0060),
+        RandomCity("London", 51.5074, -0.1278),
+        RandomCity("Tokyo", 35.6762, 139.6503),
+        RandomCity("Sydney", -33.8688, 151.2093),
+        RandomCity("Rio de Janeiro", -22.9068, -43.1729),
+        RandomCity("Cape Town", -33.9249, 18.4241),
+        RandomCity("Dubai", 25.2048, 55.2708),
+        RandomCity("Singapore", 1.3521, 103.8198),
+        RandomCity("Paris", 48.8566, 2.3522),
+        RandomCity("Toronto", 43.6532, -79.3832)
+    )
 
     override fun onBind(intent: Intent): IBinder? = null
 
@@ -90,6 +109,16 @@ class MockLocationService : Service() {
                 }
                 startForeground(NOTIFICATION_ID, buildTravelNotification(speedKmh))
                 startTravel(speedKmh)
+            }
+            ACTION_RANDOM_START -> {
+                if (randomCities.isEmpty()) {
+                    broadcastError("No random cities configured.")
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                persistRandomSession(0)
+                startForeground(NOTIFICATION_ID, buildRandomNotification(randomCities.first().name))
+                startRandomCities(0)
             }
             ACTION_STOP -> {
                 clearPersistedSession()
@@ -190,6 +219,50 @@ class MockLocationService : Service() {
         }
     }
 
+    // ── Random city mode ──────────────────────────────────────────────────────
+
+    private fun startRandomCities(initialIndex: Int) {
+        if (randomCities.isEmpty()) {
+            broadcastError("No random cities configured.")
+            clearPersistedSession()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        removeTestProvider(LocationManager.GPS_PROVIDER)
+        removeTestProvider(LocationManager.NETWORK_PROVIDER)
+        val gpsOk = addTestProvider(LocationManager.GPS_PROVIDER)
+        val netOk = addTestProvider(LocationManager.NETWORK_PROVIDER)
+        if (!gpsOk && !netOk) return
+
+        mockJob?.cancel()
+        mockJob = scope.launch {
+            var cityIndex = initialIndex.coerceIn(0, randomCities.lastIndex)
+            var elapsedSinceSwitchMs = 0L
+            var current = randomCities[cityIndex]
+
+            persistRandomSession(cityIndex)
+            announceRandomCity(current)
+
+            while (isActive) {
+                if (gpsOk) pushMockLocation(LocationManager.GPS_PROVIDER, current.lat, current.lng, 5f)
+                if (netOk) pushMockLocation(LocationManager.NETWORK_PROVIDER, current.lat, current.lng, 5f)
+
+                delay(500L)
+                elapsedSinceSwitchMs += 500L
+
+                if (elapsedSinceSwitchMs >= 10_000L) {
+                    cityIndex = (cityIndex + 1) % randomCities.size
+                    current = randomCities[cityIndex]
+                    elapsedSinceSwitchMs = 0L
+                    persistRandomSession(cityIndex)
+                    announceRandomCity(current)
+                }
+            }
+        }
+    }
+
     // ── Geometry helpers ───────────────────────────────────────────────────────
 
     private fun haversineMeters(from: LatLng, to: LatLng): Double {
@@ -280,6 +353,21 @@ class MockLocationService : Service() {
         })
     }
 
+    private fun broadcastRandomCity(city: RandomCity) {
+        sendBroadcast(Intent(BROADCAST_RANDOM_CITY).apply {
+            putExtra(EXTRA_CITY, city.name)
+            putExtra(EXTRA_LAT, city.lat)
+            putExtra(EXTRA_LNG, city.lng)
+            setPackage(packageName)
+        })
+    }
+
+    private fun announceRandomCity(city: RandomCity) {
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, buildRandomNotification(city.name))
+        broadcastRandomCity(city)
+    }
+
     private fun hasPersistedSession(): Boolean =
         !servicePrefs.getString(KEY_MODE, null).isNullOrEmpty()
 
@@ -312,6 +400,18 @@ class MockLocationService : Service() {
         return true
     }
 
+    private fun persistRandomSession(index: Int) {
+        servicePrefs.edit()
+            .putString(KEY_MODE, MODE_RANDOM)
+            .putInt(KEY_RANDOM_INDEX, index.coerceIn(0, randomCities.lastIndex))
+            .remove(KEY_LAT)
+            .remove(KEY_LNG)
+            .remove(KEY_ACC)
+            .remove(KEY_SPEED_KMH)
+            .remove(KEY_ROUTE)
+            .apply()
+    }
+
     private fun restorePersistedSession() {
         when (servicePrefs.getString(KEY_MODE, null)) {
             MODE_STATIC -> {
@@ -338,6 +438,17 @@ class MockLocationService : Service() {
                 RouteRepository.route = route
                 startForeground(NOTIFICATION_ID, buildTravelNotification(speedKmh))
                 startTravel(speedKmh)
+            }
+            MODE_RANDOM -> {
+                if (randomCities.isEmpty()) {
+                    clearPersistedSession()
+                    stopSelf()
+                    return
+                }
+                val index = servicePrefs.getInt(KEY_RANDOM_INDEX, 0).coerceIn(0, randomCities.lastIndex)
+                val city = randomCities[index]
+                startForeground(NOTIFICATION_ID, buildRandomNotification(city.name))
+                startRandomCities(index)
             }
             else -> stopSelf()
         }
@@ -393,6 +504,14 @@ class MockLocationService : Service() {
             .setContentTitle("Travel Simulation Active")
             .setContentText("Speed: ${speedKmh.toInt()} km/h")
             .setSmallIcon(android.R.drawable.ic_menu_directions)
+            .setOngoing(true)
+            .build()
+
+    private fun buildRandomNotification(cityName: String): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Random Mock Active")
+            .setContentText("City: $cityName (switches every 10 seconds)")
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
             .build()
 }
