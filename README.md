@@ -1,6 +1,6 @@
 # EvilGPS
 
-[**Download APK (v1.0 - ARM64, 9.4 MB)**](https://github.com/charanaerpula23-boop/EvilGPS/releases/download/v1.0/EvilGPS-v1.0-arm64.apk)
+[**Download Production APK (v1.0 - Release, 5.99 MB)**](releases/EvilGPS-v1.0-release.apk)
 
 EvilGPS is an Android mock location app for testing location-dependent behavior on standard Android phones. It supports both fixed spoofed coordinates and route-based travel simulation, with search, map picking, and a foreground service that keeps sessions alive more reliably.
 
